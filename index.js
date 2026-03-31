@@ -59,8 +59,19 @@ bot.command('buscar', async (ctx) => {
     const titulo = libro.title || 'Título desconocido';
     const autor = libro.authors[0]?.name || 'Autor desconocido';
     const anio = libro.authors[0]?.birth_year || '?';
-    const formato = libro.formats ? Object.keys(libro.formats)[0] : 'texto';
-    const enlace = libro.formats?.[formato] || '#';
+    // Buscar un formato válido (epub, pdf, text, etc.)
+const formatosDisponibles = libro.formats || {};
+const formatosPrioridad = ['application/epub+zip', 'text/plain', 'text/html', 'application/pdf'];
+let enlace = '#';
+let formatoNombre = 'texto';
+
+for (const fmt of formatosPrioridad) {
+  if (formatosDisponibles[fmt]) {
+    enlace = formatosDisponibles[fmt];
+    formatoNombre = fmt.includes('epub') ? 'EPUB' : fmt.includes('pdf') ? 'PDF' : 'Texto';
+    break;
+  }
+}
     
     respuesta += `${index + 1}. *${titulo}*\n`;
     respuesta += `   👤 Autor: ${autor}\n`;
