@@ -1,9 +1,24 @@
 require('dotenv').config();
+const express = require('express');
 const { Telegraf } = require('telegraf');
 
+const app = express();
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
-// Comandos básicos
+// Puerto para Render (obligatorio)
+const PORT = process.env.PORT || 10000;
+
+// Servidor HTTP que Render detecta
+app.get('/', (req, res) => {
+  res.send('🤖 Bot de Pergaminos corriendo en Render. Usa Telegram para interactuar.');
+});
+app.get('/health', (req, res) => res.send('OK'));
+
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🌐 Servidor HTTP en puerto ${PORT} (para Render)`);
+});
+
+// Comandos del bot
 bot.start((ctx) => {
   ctx.reply('📖 ¡Hola! Soy el bot de PergaminosAbiertos.\n\nEscribe /buscar seguido del título de un libro y te ayudaré a encontrarlo en bibliotecas públicas.\n\nEjemplo: /buscar Don Quijote');
 });
@@ -20,12 +35,12 @@ bot.command('help', (ctx) => {
   ctx.reply('Comandos disponibles:\n\n/start - Mensaje de bienvenida\n/buscar [título] - Buscar un libro\n/help - Este mensaje');
 });
 
-// Manejo de errores para mantener el bot vivo
+// Manejo de errores
 bot.catch((err, ctx) => {
   console.error(`Error para ${ctx.updateType}:`, err);
 });
 
-// Iniciar el bot con manejo de señales
+// Iniciar el bot
 bot.launch()
   .then(() => {
     console.log('✅ Bot de búsqueda iniciado correctamente');
@@ -35,7 +50,7 @@ bot.launch()
     process.exit(1);
   });
 
-// Mantener el proceso vivo
+// Detener el bot limpiamente
 process.once('SIGINT', () => {
   console.log('🔴 Deteniendo bot...');
   bot.stop('SIGINT');
@@ -46,8 +61,3 @@ process.once('SIGTERM', () => {
   bot.stop('SIGTERM');
   process.exit(0);
 });
-
-// Esto evita que el proceso termine inmediatamente
-setInterval(() => {
-  // Mantener el proceso vivo con un heartbeat
-}, 60000);
