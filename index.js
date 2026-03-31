@@ -7,12 +7,10 @@ const app = express();
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const PORT = process.env.PORT || 10000;
 
-// Servidor HTTP para Render
 app.get('/', (req, res) => res.send('🤖 Bot de Pergaminos corriendo en Render.'));
 app.get('/health', (req, res) => res.send('OK'));
 app.listen(PORT, '0.0.0.0', () => console.log(`🌐 Servidor HTTP en puerto ${PORT}`));
 
-// Función de búsqueda mejorada
 async function buscarLibros(query) {
     try {
         const url = `https://gutendex.com/books/?search=${encodeURIComponent(query)}&languages=es`;
@@ -23,31 +21,30 @@ async function buscarLibros(query) {
         
         console.log(`✅ Encontrados ${libros.length} libros`);
         
-        // Formatear cada libro
         return libros.slice(0, 5).map(libro => {
-            // Extraer el mejor enlace disponible
             const formats = libro.formats || {};
-            let enlace = null;
-            let formato = 'Texto';
             
-            // Prioridad: EPUB > TXT > HTML > PDF
-            if (formats['application/epub+zip']) {
+            // Buscar enlaces en orden de prioridad universal
+            let enlace = null;
+            let formato = '📖 Leer';
+            
+            // Prioridad 1: HTML legible (funciona en cualquier navegador)
+            if (formats['text/html; charset=utf-8']) {
+                enlace = formats['text/html; charset=utf-8'];
+                formato = '🌐 Leer online';
+            } 
+            // Prioridad 2: EPUB estándar
+            else if (formats['application/epub+zip']) {
                 enlace = formats['application/epub+zip'];
                 formato = '📱 EPUB';
-            } else if (formats['text/plain; charset=utf-8']) {
+            }
+            // Prioridad 3: Texto plano
+            else if (formats['text/plain; charset=utf-8']) {
                 enlace = formats['text/plain; charset=utf-8'];
-                formato = '📄 Texto';
-            } else if (formats['text/plain']) {
-                enlace = formats['text/plain'];
-                formato = '📄 Texto';
-            } else if (formats['text/html']) {
-                enlace = formats['text/html'];
-                formato = '🌐 HTML';
-            } else if (formats['application/pdf']) {
-                enlace = formats['application/pdf'];
-                formato = '📑 PDF';
-            } else {
-                // Si hay algún otro formato, toma el primero
+                formato = '📄 Texto plano';
+            }
+            // Prioridad 4: Cualquier otro formato
+            else {
                 const primerFormato = Object.keys(formats)[0];
                 if (primerFormato) {
                     enlace = formats[primerFormato];
@@ -55,20 +52,18 @@ async function buscarLibros(query) {
                 }
             }
             
-            const autor = libro.authors && libro.authors[0] 
-                ? libro.authors[0].name 
-                : 'Autor desconocido';
+            const autor = libro.authors && libro.authors[0] ? libro.authors[0].name : 'Autor desconocido';
+            const anio = libro.authors && libro.authors[0] && libro.authors[0].birth_year ? libro.authors[0].birth_year : '';
             
-            const anio = libro.authors && libro.authors[0] && libro.authors[0].birth_year
-                ? libro.authors[0].birth_year
-                : '';
+            console.log(`📖 ${libro.title} → ${formato}: ${enlace}`);
             
             return {
                 titulo: libro.title || 'Título desconocido',
                 autor: autor,
                 anio: anio,
                 enlace: enlace,
-                formato: formato
+                formato: formato,
+                id: libro.id
             };
         });
         
@@ -78,12 +73,10 @@ async function buscarLibros(query) {
     }
 }
 
-// Comando /start
 bot.start((ctx) => {
-    ctx.reply('📖 ¡Hola! Soy el bot de PergaminosAbiertos.\n\nEscribe /buscar seguido del título de un libro y te ayudaré a encontrarlo en bibliotecas públicas.\n\nEjemplo: /buscar Don Quijote');
+    ctx.reply('📖 ¡Hola! Soy el bot de PergaminosAbiertos.\n\nEscribe /buscar seguido del título de un libro.\n\nEjemplo: /buscar Don Quijote');
 });
 
-// Comando /buscar
 bot.command('buscar', async (ctx) => {
     const query = ctx.message.text.replace('/buscar ', '').trim();
     
@@ -91,7 +84,6 @@ bot.command('buscar', async (ctx) => {
         return ctx.reply('📚 Escribe: /buscar [título del libro]\n\nEjemplo: /buscar Cien años de soledad');
     }
     
-    // Mensaje de "buscando..."
     const waitingMsg = await ctx.reply(`🔍 Buscando "${query}" en bibliotecas públicas...`);
     
     try {
@@ -101,25 +93,25 @@ bot.command('buscar', async (ctx) => {
             return ctx.reply(`❌ No encontré libros para "${query}".\n\nPrueba con otro título o autor.`);
         }
         
-        // Construir respuesta
         let respuesta = `📚 *Resultados para "${query}"*:\n\n`;
         
         for (let i = 0; i < libros.length; i++) {
             const libro = libros[i];
+            
             respuesta += `${i+1}. *${libro.titulo}*\n`;
             respuesta += `   👤 ${libro.autor}`;
             if (libro.anio) respuesta += ` (${libro.anio})`;
             respuesta += `\n`;
             
             if (libro.enlace) {
-                respuesta += `   ${libro.formato}: [Descargar](${libro.enlace})\n`;
+                respuesta += `   ${libro.formato}: [Abrir](${libro.enlace})\n`;
             } else {
                 respuesta += `   📖 Sin enlace disponible\n`;
             }
             respuesta += `\n`;
         }
         
-        respuesta += `🔗 Fuente: Project Gutenberg (Gutendex)`;
+        respuesta += `🔗 Fuente: Project Gutenberg (Gutendex)\n\n📌 Los enlaces funcionan en cualquier dispositivo. Si usas iPhone, el EPUB se guarda en Archivos y se abre en Libros.`;
         
         await ctx.telegram.editMessageText(
             ctx.chat.id,
@@ -130,28 +122,24 @@ bot.command('buscar', async (ctx) => {
         );
         
     } catch (error) {
-        console.error('❌ Error en comando buscar:', error);
+        console.error('❌ Error:', error);
         await ctx.telegram.editMessageText(
             ctx.chat.id,
             waitingMsg.message_id,
             null,
-            `❌ Error al buscar "${query}".\n\nPor favor intenta de nuevo más tarde.`
+            `❌ Error al buscar "${query}".\n\nPor favor intenta de nuevo.`
         );
     }
 });
 
-// Comando /help
 bot.command('help', (ctx) => {
-    ctx.reply('Comandos disponibles:\n\n/start - Mensaje de bienvenida\n/buscar [título] - Buscar un libro\n/help - Este mensaje');
+    ctx.reply('Comandos:\n/start\n/buscar [título]\n/help');
 });
 
-// Manejo de errores general
 bot.catch((err, ctx) => {
     console.error('❌ Error general:', err);
-    ctx.reply('⚠️ Ocurrió un error. Por favor intenta de nuevo.');
 });
 
-// Iniciar el bot
 bot.launch({
     polling: {
         timeout: 30,
@@ -159,12 +147,11 @@ bot.launch({
         retryTimeout: 5000
     }
 }).then(() => {
-    console.log('✅ Bot de búsqueda iniciado correctamente');
+    console.log('✅ Bot iniciado');
 }).catch((err) => {
-    console.error('❌ Error al iniciar el bot:', err);
+    console.error('❌ Error al iniciar:', err);
     process.exit(1);
 });
 
-// Cierre graceful
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
